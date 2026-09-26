@@ -1,24 +1,31 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Three.js WebXR Hit-test (ПР4)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: transparent !important; }
+        #btn { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; font-weight: bold; background: #007bff; color: #fff; border: none; border-radius: 8px; z-index: 1000; cursor: pointer; }
+    </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
-<body style="margin:0; overflow:hidden">
-    <button id="btn" style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%)">Старт AR</button>
+<body>
+    <button id="btn">Войти в AR</button>
     <script>
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera();
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
         scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.xr.enabled = true;
         document.body.appendChild(renderer.domElement);
 
         const reticle = new THREE.Mesh(
-            new THREE.RingGeometry(0.1, 0.15, 32).rotateX(-Math.PI / 2),
-            new THREE.MeshBasicMaterial({ color: 0x00ff88 })
+            new THREE.RingGeometry(0.12, 0.15, 32).rotateX(-Math.PI / 2),
+            new THREE.MeshBasicMaterial({ color: 0x00ff88, side: THREE.DoubleSide })
         );
         reticle.matrixAutoUpdate = false;
         reticle.visible = false;
@@ -27,9 +34,12 @@
         const controller = renderer.xr.getController(0);
         controller.addEventListener("select", () => {
             if (!reticle.visible) return;
-            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.2, 32), new THREE.MeshNormalMaterial());
+            const mesh = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.1, 0.1, 0.25, 32),
+                new THREE.MeshStandardMaterial({ color: 0x3388ff, roughness: 0.3, metalness: 0.2 })
+            );
             mesh.position.setFromMatrixPosition(reticle.matrix);
-            mesh.position.y += 0.1;
+            mesh.position.y += 0.125;
             scene.add(mesh);
         });
         scene.add(controller);
@@ -37,10 +47,19 @@
         let hitTestSource = null, hitRequested = false;
 
         document.getElementById("btn").onclick = async () => {
-            const session = await navigator.xr.requestSession("immersive-ar", { requiredFeatures: ["hit-test"] });
+            const session = await navigator.xr.requestSession("immersive-ar", {
+                requiredFeatures: ["hit-test"],
+                optionalFeatures: ["dom-overlay", "local-floor"],
+                domOverlay: { root: document.body }
+            });
+            renderer.xr.setReferenceSpaceType("local");
             await renderer.xr.setSession(session);
             document.getElementById("btn").style.display = "none";
-            session.onend = () => { hitTestSource = null; hitRequested = false; document.getElementById("btn").style.display = ""; };
+            session.addEventListener("end", () => {
+                hitTestSource = null;
+                hitRequested = false;
+                document.getElementById("btn").style.display = "block";
+            });
         };
 
         renderer.setAnimationLoop((t, frame) => {
@@ -62,6 +81,12 @@
                 }
             }
             renderer.render(scene, camera);
+        });
+
+        window.addEventListener("resize", () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
         });
     </script>
 </body>

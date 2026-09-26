@@ -1,34 +1,24 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Three.js WebXR Hit-test (ПР4)</title>
-    <style>
-        body { margin: 0; overflow: hidden; background-color: transparent; }
-        #ar-btn { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 20; padding: 12px 24px; font-weight: bold; background: #007bff; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
-<body>
-    <button id="ar-btn">Войти в AR</button>
+<body style="margin:0; overflow:hidden">
+    <button id="btn" style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%)">Старт AR</button>
     <script>
-        const arBtn = document.getElementById("ar-btn");
-        let hitTestSource = null, hitTestSourceRequested = false;
-
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+        const camera = new THREE.PerspectiveCamera();
         scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.xr.enabled = true;
         document.body.appendChild(renderer.domElement);
 
         const reticle = new THREE.Mesh(
-            new THREE.RingGeometry(0.12, 0.15, 32).rotateX(-Math.PI / 2),
-            new THREE.MeshBasicMaterial({ color: 0x00ff88, side: THREE.DoubleSide })
+            new THREE.RingGeometry(0.1, 0.15, 32).rotateX(-Math.PI / 2),
+            new THREE.MeshBasicMaterial({ color: 0x00ff88 })
         );
         reticle.matrixAutoUpdate = false;
         reticle.visible = false;
@@ -37,48 +27,32 @@
         const controller = renderer.xr.getController(0);
         controller.addEventListener("select", () => {
             if (!reticle.visible) return;
-            const mesh = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.1, 0.1, 0.25, 32),
-                new THREE.MeshStandardMaterial({ color: 0x3388ff, roughness: 0.3, metalness: 0.2 })
-            );
+            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.2, 32), new THREE.MeshNormalMaterial());
             mesh.position.setFromMatrixPosition(reticle.matrix);
-            mesh.position.y += 0.125;
+            mesh.position.y += 0.1;
             scene.add(mesh);
         });
         scene.add(controller);
 
-        if ("xr" in navigator) {
-            navigator.xr.isSessionSupported("immersive-ar").then(sup => arBtn.disabled = !sup);
-        } else {
-            arBtn.disabled = true;
-        }
+        let hitTestSource = null, hitRequested = false;
 
-        arBtn.addEventListener("click", async () => {
-            const session = await navigator.xr.requestSession("immersive-ar", {
-                requiredFeatures: ["hit-test"],
-                optionalFeatures: ["dom-overlay", "local-floor"],
-                domOverlay: { root: document.body }
-            });
-            renderer.xr.setReferenceSpaceType("local");
+        document.getElementById("btn").onclick = async () => {
+            const session = await navigator.xr.requestSession("immersive-ar", { requiredFeatures: ["hit-test"] });
             await renderer.xr.setSession(session);
-            arBtn.style.display = "none";
-            session.addEventListener("end", () => {
-                hitTestSource = null;
-                hitTestSourceRequested = false;
-                arBtn.style.display = "block";
-            });
-        });
+            document.getElementById("btn").style.display = "none";
+            session.onend = () => { hitTestSource = null; hitRequested = false; document.getElementById("btn").style.display = ""; };
+        };
 
         renderer.setAnimationLoop((t, frame) => {
             if (frame) {
-                const refSpace = renderer.xr.getReferenceSpace();
                 const session = renderer.xr.getSession();
+                const refSpace = renderer.xr.getReferenceSpace();
 
-                if (!hitTestSourceRequested && session) {
+                if (!hitRequested && session) {
                     session.requestReferenceSpace("viewer").then(vSpace => {
                         session.requestHitTestSource({ space: vSpace }).then(src => hitTestSource = src);
                     });
-                    hitTestSourceRequested = true;
+                    hitRequested = true;
                 }
 
                 if (hitTestSource && refSpace) {
@@ -88,12 +62,6 @@
                 }
             }
             renderer.render(scene, camera);
-        });
-
-        window.addEventListener("resize", () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
         });
     </script>
 </body>
